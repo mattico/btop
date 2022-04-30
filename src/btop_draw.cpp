@@ -752,6 +752,7 @@ namespace Mem {
 
 					for (const auto& [name, disk] : mem.disks) {
 						if (disk.io_read.empty()) continue;
+						Logger::info("disk graph " + name);
 
 						io_graphs[name + "_activity"] = Draw::Graph{disks_width - 6, 1, "", disk.io_activity, graph_symbol};
 
@@ -843,6 +844,7 @@ namespace Mem {
 					if (cy > height - 3) break;
 					const auto& disk = disks.at(mount);
 					if (disk.io_read.empty()) continue;
+					Logger::info("mount " + mount + " " + std::to_string(disk.io_read.size()));
 					const string total = floating_humanizer(disk.total, not big_disk);
 					out += Mv::to(y+1+cy, x+1+cx) + divider + Theme::c("title") + Fx::b + uresize(disk.name, disks_width - 8) + Mv::to(y+1+cy, x+cx + disks_width - total.size())
 						+ trans(total) + Fx::ub;

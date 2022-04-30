@@ -985,6 +985,22 @@ namespace Mem {
 					disk.free_percent = 100 - disk.used_percent;
 				}
 
+				//? Get ZPool stats
+				for (std::error_code ec; auto& zpool : fs::directory_iterator(Shared::procPath / "spl/kstat/zfs", ec)) {
+					if (not zpool.is_directory()) continue;
+					diskread.open(zpool.path() / "io");
+					if (diskread.good()) {
+						string poolname = (string)zpool.path().filename();
+						if (not disks.contains(poolname)) {
+							disks[poolname] = disk_info{poolname, poolname};
+							disks.at(poolname).stat = zpool.path().string() + "/io";
+						}
+						if (not v_contains(last_found, poolname))
+							last_found.push_back(poolname);
+					}
+					diskread.close();
+				}
+
 				//? Setup disks order in UI and add swap if enabled
 				mem.disks_order.clear();
 				#ifdef SNAPPED
@@ -1009,39 +1025,66 @@ namespace Mem {
 					#endif
 
 				//? Get disks IO
-				int64_t sectors_read, sectors_write, io_ticks;
+				int64_t bytes_read, bytes_write, io_ticks;
 				disk_ios = 0;
 				for (auto& [ignored, disk] : disks) {
 					if (disk.stat.empty() or access(disk.stat.c_str(), R_OK) != 0) continue;
 					diskread.open(disk.stat);
 					if (diskread.good()) {
 						disk_ios++;
-						for (int i = 0; i < 2; i++) { diskread >> std::ws; diskread.ignore(SSmax, ' '); }
-						diskread >> sectors_read;
-						if (disk.io_read.empty())
+
+						if (disk.stat.filename() == "stat") {
+							//? Linux stat file
+							for (int i = 0; i < 2; i++) { diskread >> std::ws; diskread.ignore(SSmax, ' '); }
+							diskread >> bytes_read;
+							bytes_read *= 512;
+
+							for (int i = 0; i < 3; i++) { diskread >> std::ws; diskread.ignore(SSmax, ' '); }
+							diskread >> bytes_write;
+							bytes_read *= 512;
+
+							for (int i = 0; i < 2; i++) { diskread >> std::ws; diskread.ignore(SSmax, ' '); }
+							diskread >> io_ticks;
+						} else if (disk.stat.filename() == "io") {
+							//? ZFS stat file
+							for (int i = 0; i < 2; i++) diskread.ignore(SSmax, '\n');
+							diskread >> bytes_read;
+
+							diskread >> std::ws;
+							diskread >> bytes_write;
+
+							for (int i = 0; i < 2; i++) { diskread >> std::ws; diskread.ignore(SSmax, ' '); }
+							diskread >> io_ticks;
+							io_ticks /= 1000000;
+						} else {
+							throw std::runtime_error("Unknown disk stat file name : " + (string)disk.stat.filename());
+						}
+
+						if (disk.io_read.empty()) {
 							disk.io_read.push_back(0);
-						else
-							disk.io_read.push_back(max((int64_t)0, (sectors_read - disk.old_io.at(0)) * 512));
-						disk.old_io.at(0) = sectors_read;
+							Logger::warning("io_read empty " + (string)disk.stat);
+						} else
+							disk.io_read.push_back(max((int64_t)0, bytes_read - disk.old_io.at(0)));
+						disk.old_io.at(0) = bytes_read;
+						Logger::info("size " + ignored + " " + std::to_string(disk.io_read.size()));
 						while (cmp_greater(disk.io_read.size(), width * 2)) disk.io_read.pop_front();
 
-						for (int i = 0; i < 3; i++) { diskread >> std::ws; diskread.ignore(SSmax, ' '); }
-						diskread >> sectors_write;
 						if (disk.io_write.empty())
 							disk.io_write.push_back(0);
 						else
-							disk.io_write.push_back(max((int64_t)0, (sectors_write - disk.old_io.at(1)) * 512));
-						disk.old_io.at(1) = sectors_write;
+							disk.io_write.push_back(max((int64_t)0, bytes_write - disk.old_io.at(1)));
+						disk.old_io.at(1) = bytes_write;
 						while (cmp_greater(disk.io_write.size(), width * 2)) disk.io_write.pop_front();
 
-						for (int i = 0; i < 2; i++) { diskread >> std::ws; diskread.ignore(SSmax, ' '); }
-						diskread >> io_ticks;
 						if (disk.io_activity.empty())
 							disk.io_activity.push_back(0);
 						else
 							disk.io_activity.push_back(clamp((long)round((double)(io_ticks - disk.old_io.at(2)) / (uptime - old_uptime) / 10), 0l, 100l));
 						disk.old_io.at(2) = io_ticks;
 						while (cmp_greater(disk.io_activity.size(), width * 2)) disk.io_activity.pop_front();
+					}
+					else {
+						Logger::warning("Unable to read disk stat : " + (string)disk.stat);
 					}
 					diskread.close();
 				}
