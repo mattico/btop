@@ -25,6 +25,7 @@ tab-size = 4
 #include <netdb.h>
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <regex>
 
 #if !(defined(STATIC_BUILD) && defined(__GLIBC__))
 	#include <pwd.h>
@@ -797,6 +798,24 @@ namespace Mem {
 			throw std::runtime_error("Failed to read /proc/meminfo");
 
 		meminfo.close();
+
+        //? Read ZFS ARC info from /proc/spl/kstat/zfs/arcstats
+        ifstream arcstats(Shared::procPath / "spl/kstat/zfs/arcstats");
+        if (arcstats.good()) {
+            static const std::regex size_regex("^size\\s+\\d\\s+(\\d+)");
+            std::string line;
+            while (std::getline(arcstats, line)) {
+                std::smatch match;
+                std::regex_match(line, match, size_regex);
+                if (match.size() == 2) {
+                    mem.stats.at("arc_total") = stoull(match.str(1));
+                    mem.stats.at("arc_total") <<= 10;
+                    break;
+                }
+            }
+        }
+        arcstats.close();
+
 
 		//? Calculate percentages
 		for (const auto& name : mem_names) {

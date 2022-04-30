@@ -124,7 +124,7 @@ namespace Mem {
 	extern string box;
 	extern int x, y, width, height, min_width, min_height;
 	extern bool has_swap, shown, redraw;
-	const array<string, 4> mem_names = {"used", "available", "cached", "free"};
+	const array<string, 5> mem_names = {"used", "available", "cached", "free", "arc_total"};
 	const array<string, 2> swap_names = {"swap_used", "swap_free"};
 	extern int disk_ios;
 
@@ -142,10 +142,10 @@ namespace Mem {
 
 	struct mem_info {
 		unordered_flat_map<string, uint64_t> stats =
-			{{"used", 0}, {"available", 0}, {"cached", 0}, {"free", 0},
+			{{"used", 0}, {"available", 0}, {"cached", 0}, {"free", 0}, {"arc_total", 0},
 			{"swap_total", 0}, {"swap_used", 0}, {"swap_free", 0}};
 		unordered_flat_map<string, deque<long long>> percent =
-			{{"used", {}}, {"available", {}}, {"cached", {}}, {"free", {}},
+			{{"used", {}}, {"available", {}}, {"cached", {}}, {"free", {}}, {"arc_total", {}},
 			{"swap_total", {}}, {"swap_used", {}}, {"swap_free", {}}};
 		unordered_flat_map<string, disk_info> disks;
 		vector<string> disks_order;
