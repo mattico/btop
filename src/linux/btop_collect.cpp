@@ -759,6 +759,27 @@ namespace Mem {
 
 		mem.stats.at("swap_total") = 0;
 
+		//? Read ZFS ARC info from /proc/spl/kstat/zfs/arcstats
+		uint64_t arc_avail = 0;
+		uint64_t arc_used = 0;
+		ifstream arcstats(Shared::procPath / "spl/kstat/zfs/arcstats");
+		if (arcstats.good()) {
+			static const std::regex size_regex("^(\\w+)\\s+\\d\\s+(\\d+)");
+			std::string line;
+			while (std::getline(arcstats, line)) {
+				std::smatch match;
+				std::regex_match(line, match, size_regex);
+				if (match.str(1) == "size") {
+					arc_used = stoull(match.str(2));
+				}
+				else if (match.str(1) == "memory_available_bytes") {
+					arc_avail = stoull(match.str(2));
+					break;
+				}
+			}
+		}
+		arcstats.close();
+
 		//? Read memory info from /proc/meminfo
 		ifstream meminfo(Shared::procPath / "meminfo");
 		if (meminfo.good()) {
@@ -790,6 +811,8 @@ namespace Mem {
 				meminfo.ignore(SSmax, '\n');
 			}
 			if (not got_avail) mem.stats.at("available") = mem.stats.at("free") + mem.stats.at("cached");
+			mem.stats.at("available") += arc_avail;
+			mem.stats.at("cached") += arc_used;
 			mem.stats.at("used") = totalMem - mem.stats.at("available");
 			if (mem.stats.at("swap_total") > 0) mem.stats.at("swap_used") = mem.stats.at("swap_total") - mem.stats.at("swap_free");
 		}
